@@ -7,7 +7,7 @@ extern crate packer;
 extern crate uuid;
 extern crate warn;
 
-pub use file::Error;
+pub use raw::Error;
 pub use file::Reader;
 pub use file::Writer;
 pub use format::Chunk;

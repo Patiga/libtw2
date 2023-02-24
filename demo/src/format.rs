@@ -9,14 +9,13 @@ use std::iter::FromIterator;
 use std::u8;
 use warn::Warn;
 use warn;
+use std::io;
 
-use bitmagic::CallbackExt;
+use bitmagic::ReadExt;
 use bitmagic::Packed;
 use bitmagic::WriteCallbackExt;
-use raw::Callback;
-use raw::CallbackReadError;
-use raw::CallbackReadResultExt;
 use raw;
+use raw::IoResultExt;
 use writer;
 
 pub const MAGIC: &'static [u8; 7] = b"TWDEMO\0";
@@ -68,6 +67,8 @@ pub enum Error {
     TooShortHeader,
     TooShortHeaderVersion,
     TooShortTimelineMarkers,
+    TooShortMapSha256,
+    NotMapSha256Extension,
     UnknownMagic([u8; 7]),
     UnknownVersion(u8),
 }
@@ -414,23 +415,28 @@ pub enum ChunkHeader {
 }
 
 impl ChunkHeader {
-    pub fn read<W, CB>(warn: &mut W, cb: &mut CB, version: Version)
-        -> Result<Option<ChunkHeader>, raw::Error<CB::Error>>
+    pub fn read<W, R>(warn: &mut W, cb: &mut R, version: Version)
+        -> Result<Option<ChunkHeader>, raw::Error>
         where W: Warn<Warning>,
-              CB: Callback,
+              R: io::Read,
     {
-        let chunk_header_start: ChunkHeaderStartPacked = match cb.read_raw() {
-            Err(CallbackReadError::EndOfFile) => return Ok(None),
-            Err(CallbackReadError::Cb(e)) => return Err(raw::Error::Cb(e)),
+        let chunk_header_start: ChunkHeaderStartPacked = match cb.read_packed() {
+            Err(err) => {
+                return if err.kind() == io::ErrorKind::UnexpectedEof {
+                    Ok(None)
+                } else {
+                    Err(err.into())
+                }
+            },
             Ok(chsp) => chsp,
         };
         let chunk_header_start = chunk_header_start.unpack(warn, version);
         ChunkHeader::read_rest(warn, cb, chunk_header_start).map(Some)
     }
-    fn read_rest<W, CB>(warn: &mut W, cb: &mut CB, chs: ChunkHeaderStart)
-        -> Result<ChunkHeader, raw::Error<CB::Error>>
+    fn read_rest<W, R>(warn: &mut W, cb: &mut R, chs: ChunkHeaderStart)
+                       -> Result<ChunkHeader, raw::Error>
         where W: Warn<Warning>,
-              CB: Callback,
+              R: io::Read,
     {
         use self::ChunkHeaderStart as Chs;
         use self::ChunkSize as Cs;
@@ -445,19 +451,19 @@ impl ChunkHeader {
                 Tickmarker(keyframe, Delta(d))
             },
             Chs::Tickmarker(keyframe, Ts::TickFollows) => {
-                let tick_packed: BeI32 = cb.read_raw().on_eof(Error::TooShort)?;
+                let tick_packed: BeI32 = cb.read_packed().on_eof(Error::TooShort)?;
                 Tickmarker(keyframe, Absolute(Tick(tick_packed.to_i32())))
             },
             Chs::Chunk(type_, Cs::Size(s)) => Chunk(type_, s.u32()),
             Chs::Chunk(type_, Cs::OneSizeByteFollows) => {
-                let size: u8 = cb.read_raw().on_eof(Error::TooShort)?;
+                let size: u8 = cb.read_packed().on_eof(Error::TooShort)?;
                 if size < 30 {
                     warn.warn(Warning::OverlongChunkSizeEncoding);
                 }
                 Chunk(type_, size.u32())
             },
             Chs::Chunk(type_, Cs::TwoSizeBytesFollow) => {
-                let size_packed: LeU16 = cb.read_raw().on_eof(Error::TooShort)?;
+                let size_packed: LeU16 = cb.read_packed().on_eof(Error::TooShort)?;
                 if size_packed.to_u16() <= u8::max_value().u16() {
                     warn.warn(Warning::OverlongChunkSizeEncoding);
                 }
