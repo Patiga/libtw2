@@ -6,10 +6,10 @@ use std::io;
 use std::path::Path;
 use warn::Warn;
 
-use format::Warning;
-use format;
-use raw;
-use writer;
+use crate::format::Warning;
+use crate::format;
+use crate::raw;
+use crate::writer;
 
 pub struct Reader {
     data: Box<dyn io::Read>,

@@ -6,10 +6,10 @@ use packer::Unpacker;
 use packer;
 use warn::Warn;
 
-use bitmagic::ReadExt;
-use format::MAX_SNAPSHOT_SIZE;
-use format::Warning;
-use format;
+use crate::bitmagic::ReadExt;
+use crate::format::MAX_SNAPSHOT_SIZE;
+use crate::format::Warning;
+use crate::format;
 
 fn huffman_error(e: huffman::DecompressionError) -> format::Error {
     use huffman::DecompressionError::*;
@@ -179,10 +179,10 @@ impl Inner {
         where W: Warn<Warning>,
               R: io::Read,
     {
-        use format::Chunk;
-        use format::ChunkHeader;
-        use format::ChunkType;
-        use format::Tickmarker;
+        use crate::format::Chunk;
+        use crate::format::ChunkHeader;
+        use crate::format::ChunkType;
+        use crate::format::Tickmarker;
 
         let chunk_header;
         if let Some(ch) = ChunkHeader::read(warn, data, self.version)? {
