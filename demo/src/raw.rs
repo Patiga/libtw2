@@ -159,13 +159,13 @@ impl Reader {
     pub fn timeline_markers(&self) -> &[format::Tick] {
         &self.i.timeline_markers.timeline_markers
     }
-    pub fn read_chunk<'a, W, R>(&'a mut self, warn: &mut W, cb: &mut R)
+    pub fn read_chunk<'a, W, R>(&'a mut self, warn: &mut W, data: &mut R)
         -> Result<Option<format::Chunk<'a>>, Error>
         where W: Warn<Warning>,
               R: io::Read,
     {
         assert!(!self.error_encountered, "reading new chunks isn't supported after errors");
-        let result = self.i.read_chunk(warn, cb);
+        let result = self.i.read_chunk(warn, data);
         if let Err(_) = result {
             self.error_encountered = true;
         }
