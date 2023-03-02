@@ -2,15 +2,19 @@ extern crate arrayvec;
 extern crate binrw;
 extern crate buffer;
 extern crate common;
+extern crate gamenet_common;
+extern crate gamenet_ddnet;
 extern crate huffman;
 #[macro_use] extern crate matches;
 extern crate packer;
+extern crate snapshot;
 extern crate thiserror;
 extern crate warn;
 
 mod format;
 mod reader;
 mod writer;
+pub mod ddnet;
 
 pub use format::DemoKind;
 pub use format::RawChunk;
