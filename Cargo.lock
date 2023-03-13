@@ -302,6 +302,7 @@ dependencies = [
  "packer",
  "snapshot",
  "thiserror",
+ "uuid",
  "warn",
 ]
 
