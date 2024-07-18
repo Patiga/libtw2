@@ -81,18 +81,23 @@ fn ddnet_read_write(input: &str, output: &str) -> Result<(), Box<dyn Error>> {
         reader.timestamp(),
         reader.map_data(),
     )?;
-    let mut last_tick = None;
+    let mut tick = None;
     while let Some(chunk) = reader.next_chunk(&mut warn::Log)? {
         match chunk {
-            ddnet::Chunk::Message(msg) => writer.write_msg(&msg)?,
-            ddnet::Chunk::Snapshot(snap) => match last_tick.take() {
+            ddnet::Chunk::Message(msg) => {
+                if let Some(t) = tick.take() {
+                    writer.set_tick(t)?;
+                }
+                writer.write_msg(&msg)?
+            }
+            ddnet::Chunk::Snapshot(snap) => match tick.take() {
                 None => eprintln!("Snapshot without tick"),
                 // HACK: `.rev()` so that higher-valued items get inserted
                 // first, so that the extended item types get inserted in the
                 // same order as they were in the original demo.
                 Some(t) => writer.write_snap(t, snap.rev().map(|(obj, id)| (obj, *id)))?,
             },
-            ddnet::Chunk::Tick(t) => last_tick = Some(t),
+            ddnet::Chunk::Tick(t) => tick = Some(t),
             ddnet::Chunk::Invalid => eprintln!("Invalid chunk!"),
         }
     }

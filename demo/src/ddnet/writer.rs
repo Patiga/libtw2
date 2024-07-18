@@ -46,9 +46,11 @@ impl From<snap::BuilderError> for WriteError {
 /// Automatically writes snapshot deltas.
 pub struct DemoWriter<'a, P: for<'p> Protocol<'p>> {
     inner: crate::Writer<'a>,
-    // To verify the monotonic increase
-    last_tick: i32,
-    // Stores the last tick, in which a snapshot was written.
+    /// Last tick written to the demo file
+    demo_tick: i32,
+    /// To verify the monotonic increase
+    tick: i32,
+    /// Stores the last tick, in which a snapshot was written.
     last_keyframe: Option<i32>,
     uuid_index: UuidIndex,
     snap: Snap,
@@ -120,7 +122,8 @@ impl<'a, P: for<'p> Protocol<'p>> DemoWriter<'a, P> {
 
         Ok(Self {
             inner: raw,
-            last_tick: -1,
+            demo_tick: -1, // -1, so that a snapshot at 0 writes the tick
+            tick: 0,
             last_keyframe: None,
             uuid_index: UuidIndex::default(),
             snap: Snap::default(),
@@ -132,13 +135,24 @@ impl<'a, P: for<'p> Protocol<'p>> DemoWriter<'a, P> {
         })
     }
 
+    /// Set tick number used for snap messages
+    pub fn set_tick(&mut self, tick: i32) -> Result<(), WriteError> {
+        // We allow setting the same tick repeatedly
+        if tick < self.tick {
+            return Err(WriteError::TooLowTickNumber);
+        }
+        self.tick = tick;
+        Ok(())
+    }
+
     pub fn write_snap<'b, T: Iterator<Item = (&'b P::SnapObj, u16)>>(
         &mut self,
         tick: i32,
         items: T,
     ) -> Result<(), WriteError> {
-        // Verify that the tick number is strictly increasing.
-        if tick < self.last_tick {
+        // Verify that the tick number is strictly increasing for snaps.
+        // We also ensure that a tick increase happened right before the snap.
+        if tick <= self.tick {
             return Err(WriteError::TooLowTickNumber);
         }
         // We write a keyframe at the start, and another keyframe every 5 seconds.
@@ -161,7 +175,10 @@ impl<'a, P: for<'p> Protocol<'p>> DemoWriter<'a, P> {
         let old_snap = mem::take(&mut self.snap);
         let new_snap = mem::take(&mut self.builder).finish();
 
-        self.inner.write_tick(is_keyframe, tick)?;
+        if self.demo_tick != self.tick {
+            self.inner.write_tick(is_keyframe, tick)?;
+            self.demo_tick = tick;
+        }
         if is_keyframe {
             let keys = &mut self.i32_buf;
             with_packer(&mut self.buf, |p| new_snap.write(keys, p))
@@ -181,13 +198,17 @@ impl<'a, P: for<'p> Protocol<'p>> DemoWriter<'a, P> {
         self.snap = new_snap;
         self.builder = old_snap.recycle();
         self.buf.clear();
-        self.last_tick = tick;
+        self.tick = tick;
         if is_keyframe {
             self.last_keyframe = Some(tick);
         }
         Ok(())
     }
     pub fn write_msg(&mut self, msg: &<P as Protocol<'_>>::Game) -> Result<(), WriteError> {
+        if self.demo_tick != self.tick && self.tick != 0 {
+            self.inner.write_tick(false, self.tick)?;
+            self.demo_tick = self.tick;
+        }
         with_packer(&mut self.buf, |p| msg.encode(p)).map_err(|_| WriteError::TooLongNetMsg)?;
         self.inner.write_message(self.buf.as_slice())?;
         self.buf.clear();
